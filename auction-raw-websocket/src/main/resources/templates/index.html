@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"><title>Live Auction</title>
+  <style>
+    body{font-family:system-ui,sans-serif;max-width:560px;margin:2rem auto;padding:0 1rem}
+    input,button{padding:.5rem;font-size:1rem} .err{color:#b00020} #log{color:#555;font-size:.9rem}
+  </style>
+</head>
+<body>
+  <h1 th:text="${state.item()}">Item</h1>
+  <p>Status: <b id="status">connecting...</b></p>
+  <h2>Current bid: Rs<span id="bid" th:text="${state.currentBid()}"></span></h2>
+  <p>Leader: <b id="leader" th:text="${state.leader()}"></b> | Bids: <span id="count" th:text="${state.bidCount()}"></span></p>
+  <input id="user" placeholder="Your name">
+  <input id="amount" type="number" step="0.01" placeholder="Amount">
+  <button id="btn">Place bid</button>
+  <p id="error" class="err"></p>
+  <ul id="log"></ul>
+<script>
+const $ = id => document.getElementById(id);
+const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+function setStatus(on){ $('status').textContent = on ? 'connected' : 'disconnected, retrying...'; }
+function render(s){
+  $('bid').textContent = s.currentBid; $('leader').textContent = s.leader; $('count').textContent = s.bidCount;
+  const li = document.createElement('li');
+  li.textContent = new Date().toLocaleTimeString() + '  ' + s.leader + ' -> Rs.' + s.currentBid;
+  $('log').prepend(li); $('error').textContent = '';
+}
+function showError(m){ $('error').textContent = m; }
+function bidPayload(){ return { user: $('user').value.trim(), amount: $('amount').value }; }
+let ws;
+function connect() {
+  ws = new WebSocket(`${proto}://${location.host}/ws/auction`);
+  ws.onopen = () => setStatus(true);
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.type === 'STATE') render(m.data);
+    else if (m.type === 'ERROR') showError(m.message);
+  };
+  ws.onclose = () => { setStatus(false); setTimeout(connect, 2000); }; // manual reconnect
+}
+$('btn').onclick = () => {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'BID', ...bidPayload() }));
+};
+connect();
+</script>
+</body>
+</html>
